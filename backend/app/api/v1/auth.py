@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
 import datetime
 import math
+import hmac
 import secrets
 
 from app.db.session import get_db
@@ -135,8 +136,7 @@ def generate_user_otp(req: OTPGenerateRequest, db: Session = Depends(get_db)):
 
     otp_record = UserOTP(
         identifier=ident,
-        otp_code=hash_otp(otp_code, otp_salt),
-        otp_salt=otp_salt,
+        otp_code=f"{otp_salt}${hash_otp(otp_code, otp_salt)}",
         purpose=req.purpose,
         expires_at=expires_at,
         is_used=False
@@ -145,13 +145,16 @@ def generate_user_otp(req: OTPGenerateRequest, db: Session = Depends(get_db)):
     db.commit()
 
     # Deliver the code through a configured email/SMS provider in production.
-    return {
+    response = {
         "success": True,
         "identifier": ident,
         "purpose": req.purpose,
         "expires_in_seconds": 300,
         "message": "If the account exists, a verification code has been sent."
     }
+    if settings.AUTH_DEMO_MODE:
+        response["temporary_code"] = otp_code
+    return response
 
 @router.post("/verify-otp", response_model=AuthResponse)
 def verify_user_otp(req: OTPVerifyRequest, db: Session = Depends(get_db)):
@@ -165,7 +168,13 @@ def verify_user_otp(req: OTPVerifyRequest, db: Session = Depends(get_db)):
         UserOTP.expires_at > now
     ).first()
 
-    if not otp_record or not hmac.compare_digest(otp_record.otp_code, hash_otp(req.otp_code.strip(), otp_record.otp_salt)):
+    if not otp_record:
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP code. Please request a new one.")
+    try:
+        otp_salt, otp_hash = otp_record.otp_code.split("$", 1)
+    except ValueError:
+        otp_salt, otp_hash = "", ""
+    if not otp_salt or not hmac.compare_digest(otp_hash, hash_otp(req.otp_code.strip(), otp_salt)):
         raise HTTPException(status_code=400, detail="Invalid or expired OTP code. Please request a new one.")
 
     otp_record.is_used = True
@@ -280,3 +289,4 @@ def update_user_settings(
     db.commit()
     db.refresh(settings_obj)
     return settings_obj
+

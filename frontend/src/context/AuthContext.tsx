@@ -43,8 +43,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(freshUser);
         localStorage.setItem("traffic_auth_user", JSON.stringify(freshUser));
       } catch (err) {
-        console.warn("Session token expired or backend offline, relying on cached user if available");
+        localStorage.removeItem("traffic_auth_token");
+        localStorage.removeItem("traffic_auth_user");
+        setUser(null);
       }
+    } else {
+      localStorage.removeItem("traffic_auth_user");
+      setUser(null);
     }
     setIsLoading(false);
   };
@@ -118,3 +123,4 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+

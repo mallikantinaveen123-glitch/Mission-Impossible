@@ -64,3 +64,4 @@ class AuthResponse(BaseModel):
     token_type: str = "bearer"
     user: UserResponse
     message: str = "Success"
+

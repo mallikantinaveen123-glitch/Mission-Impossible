@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
-import { AuthProvider } from "./context/AuthContext"
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom"
+import { AuthProvider, useAuth } from "./context/AuthContext"
 import PublicLayout from "./layouts/PublicLayout"
 import AuthorityLayout from "./layouts/AuthorityLayout"
 import Home from "./pages/public/Home"
@@ -14,6 +14,7 @@ import PhotoDetection from "./pages/authority/PhotoDetection"
 import VideoDetection from "./pages/authority/VideoDetection"
 import Violations from "./pages/authority/Violations"
 import MapView from "./pages/authority/MapView"
+import Analytics from "./pages/authority/Analytics"
 import Navigation from "./pages/authority/Navigation"
 import Cameras from "./pages/authority/Cameras"
 import CameraFeed from "./pages/authority/CameraFeed"
@@ -35,7 +36,8 @@ export default function App() {
             <Route path="/login" element={<Login />} />
           </Route>
 
-          <Route element={<AuthorityLayout />}>
+          <Route element={<ProtectedRoute />}>
+            <Route element={<AuthorityLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/detect/live" element={<LiveDetection />} />
             <Route path="/detect/photo" element={<PhotoDetection />} />
@@ -50,9 +52,16 @@ export default function App() {
             <Route path="/traffic-rules" element={<TrafficRules />} />
             <Route path="/stations" element={<InterStationHub />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Route>
           </Route>
         </Routes>
       </BrowserRouter>
     </AuthProvider>
   )
+}
+
+function ProtectedRoute() {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading) return <div className="min-h-screen bg-background" />;
+  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 }

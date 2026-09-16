@@ -284,7 +284,7 @@ export async function generateOtp(payload: { identifier: string; purpose?: strin
   identifier: string;
   purpose: string;
   expires_in_seconds: number;
-  otp_demo_code: string;
+  temporary_code?: string;
   message: string;
 }> {
   const res = await apiClient.post("/auth/generate-otp", payload);

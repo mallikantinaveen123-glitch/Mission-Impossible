@@ -31,7 +31,9 @@ def verify_password(password: str, hashed_password: str, salt: str) -> bool:
     return hmac.compare_digest(new_key.hex(), hashed_password)
 
 def hash_otp(otp: str, salt: str) -> str:
-    return hashlib.pbkdf2_hmac('sha256', otp.encode('utf-8'), salt.encode('utf-8'), 100000).hex()
+    return hashlib.pbkdf2_hmac(
+        'sha256', otp.encode('utf-8'), salt.encode('utf-8'), iterations=100000
+    ).hex()
 
 def generate_otp(length: int = 6) -> str:
     """Generates a cryptographically secure numeric OTP."""
@@ -96,3 +98,4 @@ def verify_session_token(token: str) -> dict | None:
         return payload
     except Exception:
         return None
+

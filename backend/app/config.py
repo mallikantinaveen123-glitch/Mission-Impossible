@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     AUTH_SECRET_KEY: str = os.getenv("AUTH_SECRET_KEY", "local-development-secret-change-before-deploy")
     AUTH_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("AUTH_TOKEN_EXPIRE_MINUTES", "30"))
     AUTH_OTP_EXPIRE_MINUTES: int = int(os.getenv("AUTH_OTP_EXPIRE_MINUTES", "5"))
+    AUTH_DEMO_MODE: bool = os.getenv("AUTH_DEMO_MODE", "true").lower() == "true"
     ALLOWED_ORIGINS: list = [
         "http://localhost:5173", 
         "http://localhost:3000",
