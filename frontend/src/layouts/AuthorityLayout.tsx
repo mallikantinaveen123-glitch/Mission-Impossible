@@ -15,7 +15,8 @@ import {
   BookOpen, 
   Radio, 
   LogOut,
-  Shield
+  Shield,
+  Navigation as NavigationIcon
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -57,6 +58,7 @@ export default function AuthorityLayout() {
           <NavItem to="/dashboard" icon={<LayoutDashboard size={16} />} label="Dashboard" />
           <NavItem to="/stations" icon={<Radio size={16} className="text-red-400" />} label="Station BOLO" />
           <NavItem to="/map" icon={<MapIcon size={16} />} label="Traffic & Flood Map" />
+          <NavItem to="/navigation" icon={<NavigationIcon size={16} className="text-cyan-400" />} label="GPS & Navigation" />
           <NavItem to="/analytics" icon={<BarChart3 size={16} />} label="Analytics" />
           
           <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-2 mt-4 mb-1">

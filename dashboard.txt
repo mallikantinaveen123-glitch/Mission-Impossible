@@ -1,0 +1,37 @@
+================================================================================
+SMART TRAFFIC AI SYSTEM - DASHBOARD SPECIFICATION & STATUS (2027)
+================================================================================
+
+1. OVERVIEW
+The Smart Traffic AI Operations Dashboard provides real-time telemetry, automated
+AI violation metrics, camera health status, and live routing intelligence.
+
+2. CORE METRICS & TELEMETRY
+- Violations Today: Real-time count of violations flagged by AI detection pipelines.
+- Pending Review: Incidents awaiting officer verification and citation approval.
+- Verified Incidents: Legally binding violations logged to SQLite database.
+- Camera Sensor Nodes: 14/14 active video feed nodes streaming online.
+
+3. CONNECTED TELEMETRY ENDPOINTS
+- GET /api/v1/violations/summary -> Violation statistics and status breakdown.
+- GET /api/v1/analytics/hotspots -> High-density violation clusters and GPS coords.
+- GET /api/v1/maps/flood-outlook -> Real-time waterlogging depth and bypass detours.
+- GET /api/v1/auth/settings      -> User preferences, theme, and notification configs.
+
+4. REAL-TIME NAVIGATION & GPS SYSTEM
+- Route: /navigation
+- Features:
+  * Live device GPS position tracking (HTML5 Geolocation watchPosition).
+  * Real-time Fleet Tracking (Patrol Interceptors, Green Corridor Ambulances, Defaulters).
+  * Open Source Routing Machine (OSRM) turn-by-turn routing with distance & ETA.
+  * Automatic flood choke point avoidance.
+
+5. FREE MAP API & DETAILED TRAFFIC ENGINE
+- Providers: OpenStreetMap Standard & CartoDB Voyager / Dark Matter tiles.
+- Free API Key Support: Built-in zero-cost tier with support for TomTom / Geoapify keys.
+- Telemetry Layers:
+  * Color-coded traffic speeds: Green (>50 km/h), Amber (25-45 km/h), Red (<15 km/h).
+  * Road waterlogging depth indicators (cm) with emergency pump status.
+
+STATUS: ALL SYSTEMS OPERATIONAL - ZERO ERRORS
+================================================================================
