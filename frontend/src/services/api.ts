@@ -357,3 +357,29 @@ export async function getFloodOutlook(): Promise<FloodOutlookResponse> {
   const res = await apiClient.get("/maps/flood-outlook");
   return res.data;
 }
+
+export interface TrafficDeviation {
+  id: string;
+  area_name: string;
+  junction_name: string;
+  reason: string;
+  severity: "CRITICAL" | "MODERATE" | "RESTRICTION" | "PEAK_REGULATION";
+  closed_label: string;
+  closed_coords: [number, number][];
+  diversion_label: string;
+  diversion_coords: [number, number][];
+  passable_for: string;
+  detour_advice: string;
+  valid_until: string;
+}
+
+export interface TrafficDeviationsResponse {
+  generated_at: string;
+  total_active_deviations: number;
+  deviations: TrafficDeviation[];
+}
+
+export async function getTrafficDeviations(): Promise<TrafficDeviationsResponse> {
+  const res = await apiClient.get("/maps/traffic-deviations");
+  return res.data;
+}
