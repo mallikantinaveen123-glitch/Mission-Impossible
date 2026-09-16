@@ -4,7 +4,9 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     PROJECT_NAME: str = "SMART TRAFFIC AI"
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./traffic.db")
-    GOOGLE_MAPS_API_KEY: str = os.getenv("GOOGLE_MAPS_API_KEY", "")
+    AUTH_SECRET_KEY: str = os.getenv("AUTH_SECRET_KEY", "local-development-secret-change-before-deploy")
+    AUTH_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("AUTH_TOKEN_EXPIRE_MINUTES", "30"))
+    AUTH_OTP_EXPIRE_MINUTES: int = int(os.getenv("AUTH_OTP_EXPIRE_MINUTES", "5"))
     ALLOWED_ORIGINS: list = [
         "http://localhost:5173", 
         "http://localhost:3000",

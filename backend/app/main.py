@@ -41,6 +41,8 @@ from app.api.v1 import rules
 app.include_router(rules.router, prefix="/api/v1/rules", tags=["Rules"])
 from app.api.v1 import stations
 app.include_router(stations.router, prefix="/api/v1/stations", tags=["Police Stations"])
+from app.api.v1 import auth
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication & User Management"])
 
 
 @app.get("/health")

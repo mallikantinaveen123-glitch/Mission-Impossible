@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 import datetime
 from app.db.base import Base
@@ -117,4 +117,53 @@ class StationDispatchMessage(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     from_station = relationship("PoliceStation", foreign_keys=[from_station_id])
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    phone = Column(String, unique=True, index=True, nullable=True)
+    full_name = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    salt = Column(String, nullable=False)
+    role = Column(String, default="CITIZEN")  # CITIZEN, OFFICER, ADMIN
+    badge_number = Column(String, nullable=True)
+    station_id = Column(String, ForeignKey("police_stations.id"), nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_verified = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    settings = relationship("UserSettings", back_populates="user", uselist=False, cascade="all, delete-orphan")
+
+
+class UserOTP(Base):
+    __tablename__ = "user_otps"
+
+    id = Column(Integer, primary_key=True, index=True)
+    identifier = Column(String, index=True, nullable=False)  # email or phone
+    otp_code = Column(String, nullable=False)
+    purpose = Column(String, default="LOGIN")  # LOGIN, REGISTER, PASSWORD_RESET
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    dark_mode = Column(Boolean, default=True)
+    notifications_enabled = Column(Boolean, default=True)
+    traffic_alerts = Column(Boolean, default=True)
+    flood_alerts = Column(Boolean, default=True)
+    auto_archive = Column(Boolean, default=True)
+    camera_detection = Column(Boolean, default=True)
+    map_layer_preference = Column(String, default="standard")
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="settings")
 

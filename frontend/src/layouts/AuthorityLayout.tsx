@@ -1,4 +1,4 @@
-import { Outlet, NavLink } from "react-router-dom";
+import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
   Video, 
@@ -14,10 +14,19 @@ import {
   Navigation as NavigationIcon,
   BookOpen,
   Radio,
-  Siren
+  Siren,
+  LogOut
 } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
 export default function AuthorityLayout() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
   return (
     <div className="flex h-screen w-full bg-background text-foreground overflow-hidden">
       {/* Sidebar */}
@@ -77,12 +86,19 @@ export default function AuthorityLayout() {
               <Bell size={20} />
               <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-destructive"></span>
             </button>
-            <div className="flex items-center gap-2 pl-4 border-l border-border">
-              <UserCircle size={28} className="text-muted-foreground" />
+            <div className="flex items-center gap-3 pl-4 border-l border-border">
+              <UserCircle size={28} className="text-primary" />
               <div className="hidden md:block text-sm">
-                <div className="font-medium">Officer Smith</div>
-                <div className="text-xs text-muted-foreground">Admin Role</div>
+                <div className="font-semibold text-foreground leading-tight">{user?.full_name || "Inspector R. Sharma"}</div>
+                <div className="text-[11px] text-muted-foreground">{user?.role || "OFFICER"} {user?.badge_number ? `• #${user.badge_number}` : ""}</div>
               </div>
+              <button
+                onClick={handleLogout}
+                title="Sign Out"
+                className="p-2 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors ml-1"
+              >
+                <LogOut size={18} />
+              </button>
             </div>
           </div>
         </header>

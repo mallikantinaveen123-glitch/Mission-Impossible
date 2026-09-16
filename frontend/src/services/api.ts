@@ -12,6 +12,14 @@ export const apiClient = axios.create({
   timeout: 10000,
 });
 
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem("traffic_auth_token");
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export const USE_DEMO_DATA = false;
 
 // ==========================================
@@ -210,5 +218,142 @@ export async function sendStationMessage(payload: Partial<StationMessage>): Prom
 
 export async function getStationAnalytics(): Promise<CrossJurisdictionStats> {
   const res = await apiClient.get("/stations/analytics");
+  return res.data;
+}
+
+// ==========================================
+// Authentication, Users, OTP & Settings
+// ==========================================
+export interface AuthUser {
+  id: number;
+  email: string;
+  phone?: string | null;
+  full_name: string;
+  role: "CITIZEN" | "OFFICER" | "ADMIN";
+  badge_number?: string | null;
+  station_id?: string | null;
+  is_active: boolean;
+  is_verified: boolean;
+  created_at?: string;
+}
+
+export interface AuthResponseData {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+  message: string;
+}
+
+export interface UserSettingsData {
+  dark_mode: boolean;
+  notifications_enabled: boolean;
+  traffic_alerts: boolean;
+  flood_alerts: boolean;
+  auto_archive: boolean;
+  camera_detection: boolean;
+  map_layer_preference: string;
+}
+
+export interface GeneratedPasswordData {
+  password: string;
+  length: number;
+  strength: string;
+  entropy_bits: number;
+}
+
+export async function loginUser(payload: { identifier: string; password: string }): Promise<AuthResponseData> {
+  const res = await apiClient.post("/auth/login", payload);
+  return res.data;
+}
+
+export async function registerUser(payload: {
+  email: string;
+  phone?: string;
+  full_name: string;
+  password: string;
+  role?: string;
+  badge_number?: string;
+  station_id?: string;
+}): Promise<AuthResponseData> {
+  const res = await apiClient.post("/auth/register", payload);
+  return res.data;
+}
+
+export async function generateOtp(payload: { identifier: string; purpose?: string }): Promise<{
+  success: boolean;
+  identifier: string;
+  purpose: string;
+  expires_in_seconds: number;
+  otp_demo_code: string;
+  message: string;
+}> {
+  const res = await apiClient.post("/auth/generate-otp", payload);
+  return res.data;
+}
+
+export async function verifyOtp(payload: { identifier: string; otp_code: string; purpose?: string }): Promise<AuthResponseData> {
+  const res = await apiClient.post("/auth/verify-otp", payload);
+  return res.data;
+}
+
+export async function fetchGeneratedPassword(length: number = 16): Promise<GeneratedPasswordData> {
+  const res = await apiClient.get("/auth/generate-password", { params: { length } });
+  return res.data;
+}
+
+export async function resetPasswordWithOtp(payload: {
+  identifier: string;
+  otp_code: string;
+  new_password: string;
+}): Promise<{ success: boolean; message: string }> {
+  const res = await apiClient.post("/auth/reset-password", payload);
+  return res.data;
+}
+
+export async function getMe(): Promise<AuthUser> {
+  const res = await apiClient.get("/auth/me");
+  return res.data;
+}
+
+export async function getUserSettings(): Promise<UserSettingsData> {
+  const res = await apiClient.get("/auth/settings");
+  return res.data;
+}
+
+export async function updateUserSettings(settings: Partial<UserSettingsData>): Promise<UserSettingsData> {
+  const res = await apiClient.put("/auth/settings", settings);
+  return res.data;
+}
+
+// ==========================================
+// Maps & Flood Hazard Outlook
+// ==========================================
+export interface FloodHazard {
+  id: string;
+  location_name: string;
+  lat: number;
+  lng: number;
+  water_depth_cm: number;
+  severity: "LOW" | "MODERATE" | "CRITICAL";
+  status: string;
+  status_label: string;
+  passable_for: string;
+  recommended_bypass: string;
+  pumps_deployed: number;
+  drainage_status: string;
+  last_updated: string;
+}
+
+export interface FloodOutlookResponse {
+  generated_at: string;
+  weather_condition: string;
+  city_wide_risk: string;
+  active_hazard_points: number;
+  total_monitored_junctions: number;
+  hazards: FloodHazard[];
+}
+
+export async function getFloodOutlook(): Promise<FloodOutlookResponse> {
+  const res = await apiClient.get("/maps/flood-outlook");
   return res.data;
 }

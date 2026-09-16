@@ -1,5 +1,6 @@
 from app.db.session import SessionLocal
-from app.db.models import Violation, Evidence, Camera, TrafficRule, PoliceStation, InterStationAlert, StationDispatchMessage
+from app.db.models import Violation, Evidence, Camera, TrafficRule, PoliceStation, InterStationAlert, StationDispatchMessage, User, UserSettings
+from app.core.security import hash_password
 import datetime
 
 def seed_db():
@@ -288,6 +289,60 @@ def seed_db():
             ]
             db.add_all(dispatches)
             db.commit()
+
+        # Seed Default Users if empty
+        if not db.query(User).first():
+            officer_hash, officer_salt = hash_password("Officer@2026")
+            officer_user = User(
+                email="officer@traffic.gov.in",
+                phone="9876543210",
+                full_name="Inspector R. Sharma",
+                hashed_password=officer_hash,
+                salt=officer_salt,
+                role="OFFICER",
+                badge_number="AP-TRF-9021",
+                station_id="PS-BANJARA",
+                is_active=True,
+                is_verified=True
+            )
+            db.add(officer_user)
+            db.commit()
+            db.refresh(officer_user)
+
+            officer_settings = UserSettings(
+                user_id=officer_user.id,
+                dark_mode=True,
+                notifications_enabled=True,
+                traffic_alerts=True,
+                flood_alerts=True
+            )
+            db.add(officer_settings)
+
+            citizen_hash, citizen_salt = hash_password("Citizen@2026")
+            citizen_user = User(
+                email="citizen@example.com",
+                phone="9123456780",
+                full_name="Naveen Kumar",
+                hashed_password=citizen_hash,
+                salt=citizen_salt,
+                role="CITIZEN",
+                is_active=True,
+                is_verified=True
+            )
+            db.add(citizen_user)
+            db.commit()
+            db.refresh(citizen_user)
+
+            citizen_settings = UserSettings(
+                user_id=citizen_user.id,
+                dark_mode=False,
+                notifications_enabled=True,
+                traffic_alerts=True,
+                flood_alerts=True
+            )
+            db.add(citizen_settings)
+            db.commit()
+            print("Seeded default demo users (Officer and Citizen).")
         
         print("Database seeded with sample data and police stations.")
     except Exception as e:
