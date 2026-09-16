@@ -43,7 +43,7 @@ export default function Login() {
     setLoading(true);
     try {
       const result = await generateOtp({ identifier: identifier.trim(), purpose: "LOGIN" });
-      setTemporaryCode(result.temporary_code || "");
+      setTemporaryCode((result as any).otp_demo_code || (result as any).temporary_code || "");
       setStep("otp");
       setMessage("A verification code is ready. Enter it below to continue.");
     } catch (err: any) {

@@ -4,48 +4,26 @@
  
 @layer base {
   :root {
-    --background: 222 47% 5%; /* Ultra deep void black/navy */
+    --background: 222 47% 7%;
     --foreground: 210 40% 98%;
-    --card: 222 47% 8%;
+    --card: 222 47% 10%;
     --card-foreground: 210 40% 98%;
-    --popover: 222 47% 8%;
+    --popover: 222 47% 10%;
     --popover-foreground: 210 40% 98%;
-    --primary: 187 92% 52%; /* Cyber Electric Cyan #06b6d4 */
-    --primary-foreground: 222 47% 5%;
-    --secondary: 222 40% 14%;
+    --primary: 199 89% 48%; /* Clean tech cyan */
+    --primary-foreground: 222 47% 7%;
+    --secondary: 222 30% 16%;
     --secondary-foreground: 210 40% 98%;
-    --muted: 222 40% 12%;
-    --muted-foreground: 215 25% 65%;
-    --accent: 263 70% 50%; /* Electric Violet */
+    --muted: 222 30% 14%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 222 30% 18%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
-    --border: 220 35% 15%;
-    --input: 220 35% 15%;
-    --ring: 187 92% 52%;
-    --radius: 0.85rem;
-  }
- 
-  .dark {
-    --background: 222 47% 5%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 8%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 8%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 187 92% 52%;
-    --primary-foreground: 222 47% 5%;
-    --secondary: 222 40% 14%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 222 40% 12%;
-    --muted-foreground: 215 25% 65%;
-    --accent: 263 70% 50%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 220 35% 15%;
-    --input: 220 35% 15%;
-    --ring: 187 92% 52%;
+    --border: 222 30% 18%;
+    --input: 222 30% 18%;
+    --ring: 199 89% 48%;
+    --radius: 0.75rem;
   }
 }
  
@@ -54,90 +32,34 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased selection:bg-cyan-500/30 selection:text-cyan-200;
-    background-image: 
-      radial-gradient(ellipse at 50% 0%, rgba(6, 182, 212, 0.08) 0%, transparent 60%),
-      radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.06) 0%, transparent 50%),
-      linear-gradient(to right, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-    background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+    @apply bg-background text-foreground antialiased;
   }
 }
 
-/* 2027 Futuristic Glassmorphism & Cyber Accents */
-.cyber-glass {
-  background: rgba(13, 20, 36, 0.72);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(56, 189, 248, 0.15);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+/* Minimalist Clean Cards */
+.clean-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  transition: border-color 0.2s ease, transform 0.2s ease;
 }
 
-.cyber-glass:hover {
-  border-color: rgba(56, 189, 248, 0.35);
-  box-shadow: 0 12px 40px 0 rgba(6, 182, 212, 0.15);
+.clean-card:hover {
+  border-color: #334155;
 }
 
-.cyber-card {
-  position: relative;
-  background: linear-gradient(135deg, rgba(16, 24, 44, 0.85) 0%, rgba(10, 15, 28, 0.95) 100%);
-  border: 1px solid rgba(56, 189, 248, 0.18);
-  border-radius: 14px;
-  backdrop-filter: blur(14px);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.cyber-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(6, 182, 212, 0.4);
-  box-shadow: 0 10px 30px -10px rgba(6, 182, 212, 0.25);
-}
-
-/* Holographic gradient text */
-.hologram-text {
-  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.cyan-neon-text {
-  color: #38bdf8;
-  text-shadow: 0 0 12px rgba(56, 189, 248, 0.5);
-}
-
-/* Futuristic Scanline animation */
-@keyframes scanline {
-  0% { transform: translateY(-100%); }
-  100% { transform: translateY(1000%); }
-}
-
-.scanline-overlay {
-  position: relative;
-  overflow: hidden;
-}
-
-.scanline-overlay::after {
-  content: "";
-  position: absolute;
-  top: 0; left: 0; right: 0; height: 4px;
-  background: linear-gradient(to bottom, rgba(6, 182, 212, 0), rgba(6, 182, 212, 0.4), rgba(6, 182, 212, 0));
-  opacity: 0.6;
-  animation: scanline 8s linear infinite;
-  pointer-events: none;
-}
-
-/* Custom Cyber Scrollbar */
+/* Lightweight Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(10, 15, 28, 0.8);
+  background: #0b0f19;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(56, 189, 248, 0.25);
+  background: #1e293b;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(56, 189, 248, 0.5);
+  background: #334155;
 }
