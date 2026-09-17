@@ -4,7 +4,8 @@ import datetime
 import math
 
 from app.db.session import get_db
-from app.db.models import User, UserOTP, UserSettings, AuditLog
+from app.db.models import User, UserOTP, UserSettings
+from app.core.audit import log_audit_event
 from app.schemas.user import (
     UserRegisterRequest,
     UserLoginRequest,
@@ -66,7 +67,7 @@ def register(req: UserRegisterRequest, request: Request, db: Session = Depends(g
         if existing_phone:
             raise HTTPException(status_code=400, detail="An account with this phone number already exists.")
 
-    # Hash password with PBKDF2-HMAC-SHA256
+    # Hash password with configured PBKDF2 iterations
     pwd_hash, salt = hash_password(req.password)
 
     new_user = User(
@@ -88,15 +89,16 @@ def register(req: UserRegisterRequest, request: Request, db: Session = Depends(g
     settings_obj = UserSettings(user_id=new_user.id)
     db.add(settings_obj)
 
-    # Audit log
-    db.add(AuditLog(
-        user_id=new_user.id,
+    # Cryptographic Audit Hash Chain
+    log_audit_event(
+        db=db,
         action="REGISTER",
         entity="USER",
         entity_id=str(new_user.id),
+        user_id=new_user.id,
         details=f"New {new_user.role} user registered ({new_user.email})",
         ip_address=ip
-    ))
+    )
     db.commit()
     db.refresh(new_user)
 
@@ -131,14 +133,15 @@ def login(req: UserLoginRequest, request: Request, db: Session = Depends(get_db)
 
     token = create_session_token(user.id, user.role, user.email)
 
-    db.add(AuditLog(
-        user_id=user.id,
+    log_audit_event(
+        db=db,
         action="LOGIN",
         entity="USER",
         entity_id=str(user.id),
+        user_id=user.id,
         details=f"Successful password login ({user.email})",
         ip_address=ip
-    ))
+    )
     db.commit()
 
     return {
@@ -155,9 +158,26 @@ def generate_user_otp(req: OTPGenerateRequest, request: Request, db: Session = D
     limiter.check(f"otp_gen_ip:{ip}", max_requests=5, window_seconds=60)
     limiter.check(f"otp_gen_id:{ident}", max_requests=3, window_seconds=60)
 
+    now = datetime.datetime.utcnow()
+
+    # Check resend cooldown (60 seconds)
+    recent_otp = db.query(UserOTP).filter(
+        UserOTP.identifier == ident,
+        UserOTP.purpose == req.purpose
+    ).order_by(UserOTP.created_at.desc()).first()
+
+    if recent_otp:
+        time_elapsed = (now - recent_otp.created_at).total_seconds()
+        if time_elapsed < settings.OTP_RESEND_COOLDOWN_SECONDS:
+            remaining = int(settings.OTP_RESEND_COOLDOWN_SECONDS - time_elapsed)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Please wait {remaining} seconds before requesting a new OTP."
+            )
+
     otp_code = generate_otp(6)
     stored_hash, _ = create_otp_hash_record(otp_code)
-    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+    expires_at = now + datetime.timedelta(seconds=settings.OTP_TTL_SECONDS)
 
     # Invalidate previous unused OTPs for this identifier
     db.query(UserOTP).filter(
@@ -170,6 +190,7 @@ def generate_user_otp(req: OTPGenerateRequest, request: Request, db: Session = D
         identifier=ident,
         otp_hash=stored_hash,
         purpose=req.purpose,
+        attempts=0,
         expires_at=expires_at,
         is_used=False
     )
@@ -180,7 +201,8 @@ def generate_user_otp(req: OTPGenerateRequest, request: Request, db: Session = D
         "success": True,
         "identifier": ident,
         "purpose": req.purpose,
-        "expires_in_seconds": 300,
+        "expires_in_seconds": settings.OTP_TTL_SECONDS,
+        "resend_cooldown_seconds": settings.OTP_RESEND_COOLDOWN_SECONDS,
         "message": "If the account exists, a verification code has been generated."
     }
     if settings.AUTH_DEMO_MODE:
@@ -202,9 +224,27 @@ def verify_user_otp(req: OTPVerifyRequest, request: Request, db: Session = Depen
         UserOTP.expires_at > now
     ).first()
 
-    if not otp_record or not verify_otp_hash_record(req.otp_code.strip(), otp_record.otp_hash):
+    if not otp_record:
         raise HTTPException(status_code=400, detail="Invalid or expired OTP code. Please request a new one.")
 
+    # Check maximum attempt threshold
+    if otp_record.attempts >= settings.OTP_MAX_ATTEMPTS:
+        otp_record.is_used = True
+        db.commit()
+        raise HTTPException(status_code=400, detail="Maximum verification attempts exceeded. Please request a new OTP.")
+
+    # Constant-time verification
+    is_valid = verify_otp_hash_record(req.otp_code.strip(), otp_record.otp_hash)
+    if not is_valid:
+        otp_record.attempts += 1
+        if otp_record.attempts >= settings.OTP_MAX_ATTEMPTS:
+            otp_record.is_used = True
+            db.commit()
+            raise HTTPException(status_code=400, detail="Maximum attempts reached. This OTP has been invalidated.")
+        db.commit()
+        raise HTTPException(status_code=400, detail=f"Invalid OTP code. {settings.OTP_MAX_ATTEMPTS - otp_record.attempts} attempts remaining.")
+
+    # Mark as one-time used
     otp_record.is_used = True
 
     # Find or auto-provision citizen user if logging in
@@ -228,14 +268,15 @@ def verify_user_otp(req: OTPVerifyRequest, request: Request, db: Session = Depen
         settings_obj = UserSettings(user_id=user.id)
         db.add(settings_obj)
 
-    db.add(AuditLog(
-        user_id=user.id,
+    log_audit_event(
+        db=db,
         action="OTP_VERIFY_LOGIN",
         entity="USER",
         entity_id=str(user.id),
+        user_id=user.id,
         details=f"Successful OTP sign-in for {ident}",
         ip_address=ip
-    ))
+    )
     db.commit()
     db.refresh(user)
 
@@ -291,14 +332,15 @@ def reset_password(req: PasswordResetRequest, request: Request, db: Session = De
     user.salt = salt
     otp_record.is_used = True
 
-    db.add(AuditLog(
-        user_id=user.id,
+    log_audit_event(
+        db=db,
         action="PASSWORD_RESET",
         entity="USER",
         entity_id=str(user.id),
+        user_id=user.id,
         details=f"Password successfully reset for {user.email}",
         ip_address=ip
-    ))
+    )
     db.commit()
 
     return {"success": True, "message": "Password updated successfully. You can now log in."}

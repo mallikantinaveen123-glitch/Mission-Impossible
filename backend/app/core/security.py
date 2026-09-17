@@ -5,36 +5,42 @@ import string
 import time
 import base64
 import json
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Any
 from app.config import settings
 
 SECRET_KEY = settings.AUTH_SECRET_KEY
+HASH_ALGO = settings.PASSWORD_HASH_ALGORITHM
+HASH_ITERATIONS = settings.PASSWORD_HASH_ITERATIONS
+SALT_BYTES = settings.SALT_LENGTH
 
 def hash_password(password: str) -> Tuple[str, str]:
-    """Hashes a password with PBKDF2-HMAC-SHA256 and a random 16-byte salt."""
-    salt = secrets.token_hex(16)
+    """
+    Hashes a password with PBKDF2 using configurable algorithm,
+    iterations, and cryptographically secure salt length.
+    """
+    salt = secrets.token_hex(SALT_BYTES)
     key = hashlib.pbkdf2_hmac(
-        'sha256',
+        HASH_ALGO,
         password.encode('utf-8'),
         salt.encode('utf-8'),
-        iterations=100000
+        iterations=HASH_ITERATIONS
     )
     return key.hex(), salt
 
 def verify_password(password: str, hashed_password: str, salt: str) -> bool:
     """Verifies a password against the stored hash and salt using constant-time comparison."""
     new_key = hashlib.pbkdf2_hmac(
-        'sha256',
+        HASH_ALGO,
         password.encode('utf-8'),
         salt.encode('utf-8'),
-        iterations=100000
+        iterations=HASH_ITERATIONS
     )
     return hmac.compare_digest(new_key.hex(), hashed_password)
 
 def hash_otp(otp: str, salt: str) -> str:
-    """Generates a PBKDF2-HMAC-SHA256 hash for a 6-digit OTP using a unique per-code salt."""
+    """Generates a PBKDF2 hash for a 6-digit OTP using a unique per-code salt."""
     return hashlib.pbkdf2_hmac(
-        'sha256', otp.encode('utf-8'), salt.encode('utf-8'), iterations=100000
+        HASH_ALGO, otp.encode('utf-8'), salt.encode('utf-8'), iterations=HASH_ITERATIONS
     ).hex()
 
 def create_otp_hash_record(otp: str) -> Tuple[str, str]:
@@ -57,6 +63,21 @@ def verify_otp_hash_record(plain_otp: str, stored_record: str) -> bool:
         return hmac.compare_digest(computed_hash, expected_hash)
     except Exception:
         return False
+
+def calculate_audit_hash(event_payload: Dict[str, Any], previous_hash: Optional[str] = None) -> str:
+    """
+    Calculates SHA-256 hash for an audit log event linked to previous_hash,
+    forming a verifiable cryptographic hash chain:
+    Event(N) Hash = SHA256(Event(N) + previous_hash)
+    """
+    prev = previous_hash or "0" * 64
+    serialized = json.dumps(event_payload, sort_keys=True, default=str)
+    raw = f"{prev}:{serialized}".encode('utf-8')
+    return hashlib.sha256(raw).hexdigest()
+
+def calculate_file_sha256(file_bytes: bytes) -> str:
+    """Generates SHA-256 checksum for evidence media integrity verification."""
+    return hashlib.sha256(file_bytes).hexdigest()
 
 def generate_otp(length: int = 6) -> str:
     """Generates a cryptographically secure numeric OTP."""
@@ -110,14 +131,13 @@ def verify_session_token(token: str) -> Optional[dict]:
         expected_sig = hmac.new(SECRET_KEY.encode('utf-8'), payload_b64.encode('utf-8'), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(expected_sig, signature):
             return None
-        # Add padding back if necessary
         rem = len(payload_b64) % 4
         if rem > 0:
             payload_b64 += "=" * (4 - rem)
         payload_bytes = base64.urlsafe_b64decode(payload_b64.encode('utf-8'))
         payload = json.loads(payload_bytes.decode('utf-8'))
         if payload.get("exp", 0) < int(time.time()):
-            return None # Expired
+            return None
         return payload
     except Exception:
         return None

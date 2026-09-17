@@ -219,3 +219,4 @@ def get_traffic_corridors(db: Session = Depends(get_db)):
         corridors = defaults
 
     return corridors
+

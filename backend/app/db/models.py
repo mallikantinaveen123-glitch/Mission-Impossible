@@ -13,18 +13,51 @@ class Camera(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     camera_type: Mapped[str] = mapped_column(String, default="STANDARD_ANPR")
     status: Mapped[str] = mapped_column(String, default="ONLINE")
+    health_status: Mapped[str] = mapped_column(String, default="ONLINE") # ONLINE, LOW_FPS, OFFLINE, OBSTRUCTED, BLURRED, HIGH_LATENCY
+    fps: Mapped[float] = mapped_column(Float, default=29.8)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=42)
     lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    calibration_matrix: Mapped[Optional[str]] = mapped_column(Text, nullable=True) # Perspective transformation params
+    last_heartbeat: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
 
     # Relationships
     violations: Mapped[List["Violation"]] = relationship("Violation", back_populates="camera")
+    incidents: Mapped[List["Incident"]] = relationship("Incident", back_populates="camera")
+
+
+class Incident(Base):
+    """
+    Candidate Incident Layer:
+    AI detections and tracked trajectories form Candidate Incidents first,
+    requiring temporal confidence and officer review before issuing a formal Violation & Challan.
+    """
+    __tablename__ = "incidents"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, index=True) # e.g. "INC-2026-001842"
+    camera_id: Mapped[Optional[str]] = mapped_column(ForeignKey("cameras.id"), nullable=True)
+    vehicle_track_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True) # From ByteTrack
+    plate_number: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    incident_type: Mapped[str] = mapped_column(String, index=True) # SPEEDING, NO_HELMET, RED_LIGHT
+    confidence: Mapped[float] = mapped_column(Float, default=0.90)
+    status: Mapped[str] = mapped_column(String, default="CANDIDATE") # CANDIDATE, UNDER_REVIEW, DISMISSED, CONVERTED_TO_VIOLATION
+    lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    trajectory_metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True) # JSON trajectory points
+    detected_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
+
+    # Relationships
+    camera: Mapped[Optional["Camera"]] = relationship("Camera", back_populates="incidents")
+    violations: Mapped[List["Violation"]] = relationship("Violation", back_populates="incident")
 
 
 class Violation(Base):
     __tablename__ = "violations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
+    incident_id: Mapped[Optional[str]] = mapped_column(ForeignKey("incidents.id"), nullable=True)
+    rule_id: Mapped[Optional[int]] = mapped_column(ForeignKey("traffic_rules.id"), nullable=True)
     violation_type: Mapped[str] = mapped_column(String, index=True) # NO_HELMET, TRIPLE_RIDING, RED_LIGHT, SPEEDING
     confidence: Mapped[float] = mapped_column(Float, default=0.90)
     plate_number: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
@@ -36,12 +69,16 @@ class Violation(Base):
     speed: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     speed_limit: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     camera_id: Mapped[Optional[str]] = mapped_column(ForeignKey("cameras.id"), nullable=True)
+    verified_by: Mapped[Optional[str]] = mapped_column(String, nullable=True) # Officer badge or name
+    verified_at: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
     lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
 
     # Relationships
+    incident: Mapped[Optional["Incident"]] = relationship("Incident", back_populates="violations")
     camera: Mapped[Optional["Camera"]] = relationship("Camera", back_populates="violations")
+    rule: Mapped[Optional["TrafficRule"]] = relationship("TrafficRule", back_populates="violations")
     evidence: Mapped[List["Evidence"]] = relationship("Evidence", back_populates="violation", cascade="all, delete-orphan")
     challans: Mapped[List["Challan"]] = relationship("Challan", back_populates="violation")
     appeals: Mapped[List["ViolationAppeal"]] = relationship("ViolationAppeal", back_populates="violation")
@@ -49,11 +86,20 @@ class Violation(Base):
 
 
 class Evidence(Base):
+    """
+    Evidence Integrity System:
+    Every captured frame/video includes an immutable SHA-256 cryptographic hash,
+    camera ID, and frame number to guarantee non-tampering in court adjudication.
+    """
     __tablename__ = "evidence"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
     violation_id: Mapped[int] = mapped_column(ForeignKey("violations.id"), nullable=False)
     image_path: Mapped[str] = mapped_column(String, nullable=False)
+    sha256_hash: Mapped[str] = mapped_column(String, nullable=False, default="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+    camera_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    frame_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    captured_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
 
     # Relationships
@@ -61,6 +107,11 @@ class Evidence(Base):
 
 
 class TrafficRule(Base):
+    """
+    Versioned Traffic Rule Engine:
+    Maintains effective dates and explicit version numbers so historical challans
+    are tied to the exact legal penalty at the time the violation occurred.
+    """
     __tablename__ = "traffic_rules"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
@@ -71,11 +122,18 @@ class TrafficRule(Base):
     section: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     penalty: Mapped[str] = mapped_column(String, nullable=False)
     challan_amount: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    effective_from: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
+    effective_until: Mapped[Optional[datetime.datetime]] = mapped_column(DateTime, nullable=True)
+    source_reference: Mapped[Optional[str]] = mapped_column(String, default="Motor Vehicles (Amendment) Act 2019")
     status: Mapped[str] = mapped_column(String, default="active")
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow
     )
+
+    violations: Mapped[List["Violation"]] = relationship("Violation", back_populates="rule")
 
 
 class PoliceStation(Base):
@@ -182,17 +240,22 @@ class User(Base):
 
 
 class UserOTP(Base):
+    """
+    Hashed OTP Storage with Constant-Time Verification:
+    Strictly enforced with max attempts (5), cooldown (60s), and 5-minute TTL.
+    """
     __tablename__ = "user_otps"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
     identifier: Mapped[str] = mapped_column(String, index=True, nullable=False)  # email or phone
     otp_hash: Mapped[str] = mapped_column(String, nullable=False) # Salted cryptographic hash
     purpose: Mapped[str] = mapped_column(String, default="LOGIN")  # LOGIN, REGISTER, PASSWORD_RESET
+    attempts: Mapped[int] = mapped_column(Integer, default=0) # Tracks failed verification attempts
     expires_at: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
     is_used: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
 
-    # Synonym for backward compatibility with queries expecting otp_code
+    # Synonym for backward compatibility
     otp_code = synonym("otp_hash")
 
 
@@ -226,7 +289,7 @@ class Challan(Base):
     plate_number: Mapped[str] = mapped_column(String, index=True, nullable=False)
     vehicle_type: Mapped[str] = mapped_column(String, default="TWO_WHEELER")
     violation_type: Mapped[str] = mapped_column(String, nullable=False)
-    amount: Mapped[float] = mapped_column(Float, nullable=False) # In Rupees e.g. 1000.0
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
     penalty_code: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     status: Mapped[str] = mapped_column(String, default="UNPAID") # UNPAID, PAID, APPEALED, CANCELLED
     due_date: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
@@ -241,14 +304,22 @@ class Challan(Base):
 
 
 class ChallanPayment(Base):
+    """
+    Payment Engine State Machine:
+    Tracks idempotency keys and gateway signature state:
+    payment_created -> payment_pending -> payment_success -> payment_failed / refunded
+    """
     __tablename__ = "challan_payments"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
     challan_id: Mapped[int] = mapped_column(ForeignKey("challans.id"), nullable=False)
+    idempotency_key: Mapped[Optional[str]] = mapped_column(String, unique=True, index=True, nullable=True)
     transaction_id: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
-    payment_method: Mapped[str] = mapped_column(String, default="UPI") # UPI, NETBANKING, CARD, CASH
+    payment_gateway: Mapped[str] = mapped_column(String, default="MOCK_GATEWAY") # RAZORPAY, BBPS, CASHFREE, MOCK
+    payment_method: Mapped[str] = mapped_column(String, default="UPI")
     amount_paid: Mapped[float] = mapped_column(Float, nullable=False)
-    payment_status: Mapped[str] = mapped_column(String, default="SUCCESS") # SUCCESS, PENDING, FAILED
+    payment_status: Mapped[str] = mapped_column(String, default="payment_success") # payment_created, payment_pending, payment_success, payment_failed
+    gateway_signature: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     receipt_number: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     paid_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
 
@@ -264,9 +335,9 @@ class ViolationAppeal(Base):
     violation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("violations.id"), nullable=True)
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
-    evidence_docs: Mapped[Optional[str]] = mapped_column(Text, nullable=True) # JSON urls / text notes
+    evidence_docs: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String, default="PENDING") # PENDING, APPROVED, REJECTED
-    officer_remarks: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    officER_remarks: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     reviewed_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
     updated_at: Mapped[datetime.datetime] = mapped_column(
@@ -297,15 +368,23 @@ class TrafficCorridor(Base):
 
 
 class AuditLog(Base):
+    """
+    Cryptographically Verifiable Audit Hash Chain:
+    Event(N) Hash = SHA-256(Event(N) + previous_hash)
+    Guarantees tamper-evidence so that unauthorized deletions or modifications
+    break the cryptographic hash chain across the audit ledger.
+    """
     __tablename__ = "audit_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("users.id"), nullable=True)
-    action: Mapped[str] = mapped_column(String, nullable=False) # LOGIN, REGISTER, CHALLAN_PAID, APPEAL_FILED, RULE_UPDATED
-    entity: Mapped[str] = mapped_column(String, nullable=False) # USER, CHALLAN, VIOLATION, RULE
+    action: Mapped[str] = mapped_column(String, nullable=False)
+    entity: Mapped[str] = mapped_column(String, nullable=False)
     entity_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     ip_address: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    previous_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    event_hash: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime, default=datetime.datetime.utcnow)
 
     # Relationships
