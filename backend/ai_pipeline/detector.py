@@ -132,7 +132,11 @@ class TrafficAIDetector:
         # Pick primary violation if any
         primary_violation = detected_violations[0] if detected_violations else "NONE"
 
-        # Generate realistic bounding box coordinates [x, y, w, h] normalized or pixel
+        # Standard frame dimensions for coordinate normalization
+        frame_w = 640.0
+        frame_h = 480.0
+
+        # Generate realistic bounding box coordinates [x, y, w, h]
         if vehicle_category == "TWO_WHEELER":
             w = random.randint(90, 140)
             h = random.randint(150, 220)
@@ -140,9 +144,15 @@ class TrafficAIDetector:
             w = random.randint(180, 260)
             h = random.randint(130, 190)
 
-        x = random.randint(80, 600 - w)
-        y = random.randint(100, 480 - h)
+        x = random.randint(80, int(frame_w) - w)
+        y = random.randint(100, int(frame_h) - h)
         bbox = [x, y, w, h]
+        bbox_normalized = [
+            round(x / frame_w, 4),
+            round(y / frame_h, 4),
+            round((x + w) / frame_w, 4),
+            round((y + h) / frame_h, 4)
+        ]
 
         confidence = round(random.uniform(max(0.65, sensitivity), 0.98), 2)
         plate_confidence = round(random.uniform(0.78, 0.99), 2)
@@ -180,6 +190,7 @@ class TrafficAIDetector:
             "plate_number": plate_number,
             "plate_confidence": plate_confidence,
             "bbox": bbox,
+            "bbox_normalized": bbox_normalized,
             "vehicle_category": vehicle_category, # TWO_WHEELER or FOUR_WHEELER
             "vehicle_model": vehicle_data["name"],
             "vehicle_subclass": vehicle_data["type"],
@@ -252,6 +263,14 @@ async def analyze_image(image_bytes: bytes, delay: float = 0.5, options: Optiona
             res = TrafficAIDetector.evaluate(eval_opts)
             if primary_box:
                 res["bbox"] = primary_box
+                img_w = float(getattr(img, "width", 640))
+                img_h = float(getattr(img, "height", 480))
+                res["bbox_normalized"] = [
+                    round(max(0.0, min(1.0, primary_box[0] / img_w)), 4),
+                    round(max(0.0, min(1.0, primary_box[1] / img_h)), 4),
+                    round(max(0.0, min(1.0, primary_box[2] / img_w)), 4),
+                    round(max(0.0, min(1.0, primary_box[3] / img_h)), 4),
+                ]
                 res["confidence"] = round(primary_conf, 2)
             res["neural_engine"] = "YOLOv8-Active"
             return res

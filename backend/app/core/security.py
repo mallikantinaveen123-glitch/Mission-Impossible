@@ -5,11 +5,12 @@ import string
 import time
 import base64
 import json
+from typing import Tuple, Optional
 from app.config import settings
 
 SECRET_KEY = settings.AUTH_SECRET_KEY
 
-def hash_password(password: str) -> tuple[str, str]:
+def hash_password(password: str) -> Tuple[str, str]:
     """Hashes a password with PBKDF2-HMAC-SHA256 and a random 16-byte salt."""
     salt = secrets.token_hex(16)
     key = hashlib.pbkdf2_hmac(
@@ -31,9 +32,31 @@ def verify_password(password: str, hashed_password: str, salt: str) -> bool:
     return hmac.compare_digest(new_key.hex(), hashed_password)
 
 def hash_otp(otp: str, salt: str) -> str:
+    """Generates a PBKDF2-HMAC-SHA256 hash for a 6-digit OTP using a unique per-code salt."""
     return hashlib.pbkdf2_hmac(
         'sha256', otp.encode('utf-8'), salt.encode('utf-8'), iterations=100000
     ).hex()
+
+def create_otp_hash_record(otp: str) -> Tuple[str, str]:
+    """
+    Returns (full_stored_hash, raw_salt) where full_stored_hash is in the format 'salt$hash'.
+    Guarantees raw OTP is NEVER stored in plaintext in the database.
+    """
+    salt = secrets.token_hex(8)
+    hashed = hash_otp(otp, salt)
+    return f"{salt}${hashed}", salt
+
+def verify_otp_hash_record(plain_otp: str, stored_record: str) -> bool:
+    """Safely verifies a candidate OTP against a 'salt$hash' stored record in constant time."""
+    try:
+        parts = stored_record.split("$", 1)
+        if len(parts) != 2:
+            return False
+        salt, expected_hash = parts
+        computed_hash = hash_otp(plain_otp.strip(), salt)
+        return hmac.compare_digest(computed_hash, expected_hash)
+    except Exception:
+        return False
 
 def generate_otp(length: int = 6) -> str:
     """Generates a cryptographically secure numeric OTP."""
@@ -77,7 +100,7 @@ def create_session_token(user_id: int, role: str, email: str, expires_in_seconds
     signature = hmac.new(SECRET_KEY.encode('utf-8'), payload_b64.encode('utf-8'), hashlib.sha256).hexdigest()
     return f"{payload_b64}.{signature}"
 
-def verify_session_token(token: str) -> dict | None:
+def verify_session_token(token: str) -> Optional[dict]:
     """Verifies the session token and returns the payload if valid."""
     try:
         parts = token.split(".")
@@ -98,4 +121,3 @@ def verify_session_token(token: str) -> dict | None:
         return payload
     except Exception:
         return None
-

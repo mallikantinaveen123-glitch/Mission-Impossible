@@ -9,7 +9,7 @@ import {
   LayersControl,
   useMap 
 } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
+import "@/leaflet.css";
 import L from "leaflet";
 import { 
   Search, 
@@ -33,9 +33,9 @@ import { getTrafficDeviations, TrafficDeviation } from "@/services/api";
 // Fix Leaflet marker icons using bundled assets to prevent 404 network errors
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
-  iconRetinaUrl: '/images/marker-icon-2x.png',
-  iconUrl: '/images/marker-icon.png',
-  shadowUrl: '/images/marker-shadow.png',
+  iconRetinaUrl: '/images/marker-icon-2x.svg',
+  iconUrl: '/images/marker-icon.svg',
+  shadowUrl: '/images/marker-shadow.svg',
 });
 
 const defaultCenter: [number, number] = [17.3950, 78.4600];

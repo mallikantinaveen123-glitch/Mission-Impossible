@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { 
   Activity, 
@@ -7,12 +7,14 @@ import {
   Video, 
   Map as MapIcon,
   ArrowUpRight,
-  Clock
+  Clock,
+  Radio,
+  Wifi
 } from "lucide-react";
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts";
 import { getViolationsSummary, ViolationSummaryData } from "@/services/api";
 
-const hourlyTelemetry = [
+const initialHourlyTelemetry = [
   { time: "08:00", count: 18 },
   { time: "10:00", count: 42 },
   { time: "12:00", count: 28 },
@@ -22,6 +24,14 @@ const hourlyTelemetry = [
   { time: "20:00", count: 44 },
 ];
 
+interface RecentViolationItem {
+  id: string;
+  type: string;
+  plate: string;
+  time: string;
+  status: string;
+}
+
 export default function Dashboard() {
   const [summary, setSummary] = useState<ViolationSummaryData>({
     total: 124,
@@ -30,14 +40,23 @@ export default function Dashboard() {
     verified: 15,
     rejected: 1
   });
+  const [recentViolations, setRecentViolations] = useState<RecentViolationItem[]>([
+    { id: "V-9021", type: "Riding without helmet", plate: "TS09AB1234", time: "Just now", status: "PENDING" },
+    { id: "V-9020", type: "Red light jumping", plate: "KA01EF9012", time: "5 min ago", status: "VERIFIED" },
+    { id: "V-9019", type: "Speeding (68 in 50 zone)", plate: "MH12CD5678", time: "11 min ago", status: "VERIFIED" },
+    { id: "V-9018", type: "Triple riding", plate: "TS08XY4432", time: "18 min ago", status: "PENDING" },
+  ]);
   const [loading, setLoading] = useState(true);
+  const [wsConnected, setWsConnected] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
 
+  // Initial summary load
   useEffect(() => {
     async function loadSummary() {
       try {
         const data = await getViolationsSummary();
         if (data) setSummary(data);
-      } catch (e) {
+      } catch {
         console.warn("Using offline summary snapshot");
       } finally {
         setLoading(false);
@@ -46,17 +65,106 @@ export default function Dashboard() {
     loadSummary();
   }, []);
 
+  // WebSocket Live Telemetry Stream
+  useEffect(() => {
+    const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.hostname === "localhost" ? "localhost:8000" : window.location.host;
+    const wsUrl = `${wsProtocol}//${host}/api/v1/ws/telemetry`;
+
+    let socket: WebSocket | null = null;
+    let heartbeatTimer: any = null;
+
+    try {
+      socket = new WebSocket(wsUrl);
+      wsRef.current = socket;
+
+      socket.onopen = () => {
+        setWsConnected(true);
+        // Send heartbeat ping every 25 seconds
+        heartbeatTimer = setInterval(() => {
+          if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "PING" }));
+          }
+        }, 25000);
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.event === "VIOLATION_DETECTED" && payload.data) {
+            const v = payload.data;
+            setSummary(prev => ({
+              ...prev,
+              total: prev.total + 1,
+              today: prev.today + 1,
+              pending: prev.pending + 1
+            }));
+
+            setRecentViolations(prev => [
+              {
+                id: `V-${v.violation_id || Math.floor(Math.random() * 9000 + 1000)}`,
+                type: v.violation_type?.replace(/_/g, " ") || "Traffic Violation",
+                plate: v.plate_number || "UNRECORDED",
+                time: "Just now",
+                status: "PENDING"
+              },
+              ...prev.slice(0, 4)
+            ]);
+          } else if (payload.event === "VIOLATION_VERIFIED") {
+            setSummary(prev => ({
+              ...prev,
+              pending: Math.max(0, prev.pending - 1),
+              verified: prev.verified + 1
+            }));
+          } else if (payload.event === "CHALLAN_PAID") {
+            setSummary(prev => ({
+              ...prev,
+              verified: Math.max(0, prev.verified - 1)
+            }));
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      };
+
+      socket.onclose = () => {
+        setWsConnected(false);
+      };
+
+      socket.onerror = () => {
+        setWsConnected(false);
+      };
+    } catch {
+      setWsConnected(false);
+    }
+
+    return () => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      if (socket) socket.close();
+    };
+  }, []);
+
   return (
     <div className="flex flex-col gap-5 max-w-6xl mx-auto w-full">
-      {/* Page Title */}
+      {/* Page Title & Live Stream Status */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-white">Operations Overview</h1>
-          <p className="text-xs text-slate-400 mt-0.5">Real-time traffic telemetry and automated violations summary.</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold tracking-tight text-white">Operations Command Deck</h1>
+            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-wide uppercase border ${
+              wsConnected
+                ? "bg-emerald-950/80 text-emerald-300 border-emerald-700/60"
+                : "bg-slate-900 text-slate-400 border-slate-700"
+            }`}>
+              <span className={`h-1.5 w-1.5 rounded-full ${wsConnected ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
+              {wsConnected ? "WebSocket Live Stream" : "REST Sync"}
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">Real-time traffic telemetry and automated violations stream.</p>
         </div>
         <Link
           to="/map"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold transition-colors shadow-sm"
         >
           <MapIcon size={14} />
           View Live Traffic Map
@@ -100,20 +208,20 @@ export default function Dashboard() {
             {loading ? "..." : summary.verified}
           </div>
           <div className="text-[11px] text-emerald-500/80 mt-1">
-            Challans generated
+            Electronic challans issued
           </div>
         </div>
 
         <div className="p-4 rounded-xl bg-[#0d1322] border border-slate-800">
           <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
-            <span>Camera Nodes</span>
+            <span>Active Sensors</span>
             <Video size={15} className="text-blue-400" />
           </div>
           <div className="text-2xl font-bold text-white">
             14 / 14
           </div>
           <div className="text-[11px] text-slate-500 mt-1">
-            All nodes streaming online
+            ANPR nodes connected & streaming
           </div>
         </div>
       </div>
@@ -128,7 +236,7 @@ export default function Dashboard() {
           </div>
           <div className="h-[220px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={hourlyTelemetry}>
+              <BarChart data={initialHourlyTelemetry}>
                 <XAxis dataKey="time" stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis stroke="#475569" fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip 
@@ -150,12 +258,7 @@ export default function Dashboard() {
           </div>
 
           <div className="space-y-2.5 flex-1">
-            {[
-              { id: "V-9021", type: "Riding without helmet", plate: "TS09AB1234", time: "2 min ago", status: "PENDING" },
-              { id: "V-9020", type: "Red light jumping", plate: "KA01EF9012", time: "5 min ago", status: "VERIFIED" },
-              { id: "V-9019", type: "Speeding (68 in 50 zone)", plate: "MH12CD5678", time: "11 min ago", status: "VERIFIED" },
-              { id: "V-9018", type: "Triple riding", plate: "TS08XY4432", time: "18 min ago", status: "PENDING" },
-            ].map(v => (
+            {recentViolations.map(v => (
               <div key={v.id} className="p-2.5 rounded-lg bg-[#090d16] border border-slate-800/80 flex items-center justify-between text-xs">
                 <div>
                   <div className="font-semibold text-slate-200">{v.type}</div>
